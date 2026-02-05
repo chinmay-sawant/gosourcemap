@@ -99,7 +99,15 @@ export const useGraphData = () => {
             // Dedup within the new batch only
             const uniqueNodes = new Map();
             newNodes.forEach(n => uniqueNodes.set(n.id, n));
-            return { nodes: Array.from(uniqueNodes.values()), links: newLinks };
+            const validNodes = Array.from(uniqueNodes.values());
+            const validNodeKeys = new Set(validNodes.map(n => n.id));
+
+            // Filter links to ensures both endpoints exist
+            const validLinks = newLinks.filter(l => 
+                validNodeKeys.has(l.source) && validNodeKeys.has(l.target)
+            );
+            
+            return { nodes: validNodes, links: validLinks };
         }
 
         // Merge logic
@@ -113,9 +121,16 @@ export const useGraphData = () => {
             }
         });
 
+        const allNodeIds = new Set(combinedNodes.map(n => n.id));
+        const allLinks = [...prev.links, ...newLinks].filter(l => {
+            const sourceId = (l.source && l.source.id) || l.source;
+            const targetId = (l.target && l.target.id) || l.target;
+            return allNodeIds.has(sourceId) && allNodeIds.has(targetId);
+        });
+
         return {
             nodes: combinedNodes,
-            links: [...prev.links, ...newLinks]
+            links: allLinks
         };
       });
 
