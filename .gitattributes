@@ -1,11 +1,11 @@
 * text=auto eol=lf
-*.js text eol=lf
-*.jsx text eol=lf
-*.md text eol=lf
-*.json text eol=lf
-*.css text eol=lf
-*.html text eol=lf
-*.sum text eol=lf
-*.mod text eol=lf
-*.svg text eol=lf
-Makefile text eol=lf
+*.js text eol=lf linguist-vendored
+*.jsx text eol=lf linguist-vendored
+*.md text eol=lf linguist-vendored
+*.json text eol=lf linguist-vendored
+*.css text eol=lf linguist-vendored
+*.html text eol=lf linguist-vendored
+*.sum text eol=lf linguist-vendored
+*.mod text eol=lf linguist-vendored
+*.svg text eol=lf linguist-vendored
+Makefile text eol=lf linguist-vendored
