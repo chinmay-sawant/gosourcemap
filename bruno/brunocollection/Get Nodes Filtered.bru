@@ -5,7 +5,7 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/v1/nodes?limit=100&skip_ext=.py,.java&skip_dir=venv,node_modules
+  url: {{baseURL}}/v1/nodes?limit=100&nextToken&skip_ext=.java,.py,.js,.css,.html,.json,.md,.txt,.xml,.yml,.yaml&skip_dir=node_modules,dist,build,venv,.git,sampledata
   body: none
   auth: none
 }
@@ -13,6 +13,6 @@ get {
 params:query {
   limit: 100
   nextToken: 
-  skip_ext: .py,.java
-  skip_dir: venv,node_modules
+  skip_ext: .java,.py,.js,.css,.html,.json,.md,.txt,.xml,.yml,.yaml
+  skip_dir: node_modules,dist,build,venv,.git,sampledata
 }
