@@ -1,0 +1,17 @@
+meta {
+  name: Scan Directory (1)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseURL}}/v1/scan/dir
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "dir_path": "/home/chinmay/ChinmayPersonalProjects/gopdfsuit/"
+  }
+}

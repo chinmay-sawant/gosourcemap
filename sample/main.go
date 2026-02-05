@@ -16,6 +16,6 @@ type InventoryHandler struct {
 // This is a multi-line comment.
 func (h *InventoryHandler) GetAll(c *gin.Context) {
 	items := h.svc.GetAll()
-	http.Get("https://analytics.service/track")
+	_, _ = http.Get("https://analytics.service/track")
 	c.JSON(http.StatusOK, gin.H{"inventory": items})
 }

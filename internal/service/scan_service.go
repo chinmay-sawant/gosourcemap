@@ -132,13 +132,13 @@ func (s *scanService) ProcessZipUpload(file *multipart.FileHeader, destRoot stri
 	if err != nil {
 		return nil, err
 	}
-	defer src.Close()
+	defer func() { _ = src.Close() }()
 
 	dst, err := os.Create(zipPath)
 	if err != nil {
 		return nil, err
 	}
-	defer dst.Close()
+	defer func() { _ = dst.Close() }()
 
 	if _, err = io.Copy(dst, src); err != nil {
 		return nil, err
