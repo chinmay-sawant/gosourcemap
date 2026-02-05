@@ -14,6 +14,7 @@ frontend/** linguist-detectable=false
 *.mod linguist-detectable=false
 Makefile linguist-detectable=false
 **/Makefile linguist-detectable=false
+*.bru linguist-detectable=false  
 
 # Keep text attributes for better diffs and line endings
 *.js text eol=lf
