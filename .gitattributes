@@ -1,11 +1,28 @@
+# Global settings
 * text=auto eol=lf
-*.js text eol=lf linguist-vendored
-*.jsx text eol=lf linguist-vendored
-*.md text eol=lf linguist-vendored
-*.json text eol=lf linguist-vendored
-*.css text eol=lf linguist-vendored
-*.html text eol=lf linguist-vendored
-*.sum text eol=lf linguist-vendored
-*.mod text eol=lf linguist-vendored
-*.svg text eol=lf linguist-vendored
-Makefile text eol=lf linguist-vendored
+
+# Exclude non-Go files/directories from GitHub language statistics
+frontend/** linguist-detectable=false
+*.js linguist-detectable=false
+*.jsx linguist-detectable=false
+*.css linguist-detectable=false
+*.html linguist-detectable=false
+*.json linguist-detectable=false
+*.md linguist-detectable=false
+*.svg linguist-detectable=false
+*.sum linguist-detectable=false
+*.mod linguist-detectable=false
+Makefile linguist-detectable=false
+**/Makefile linguist-detectable=false
+
+# Keep text attributes for better diffs and line endings
+*.js text eol=lf
+*.jsx text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.svg text eol=lf
+*.sum text eol=lf
+*.mod text eol=lf
+Makefile text eol=lf
