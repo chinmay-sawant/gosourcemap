@@ -76,8 +76,21 @@ export const useGraphData = () => {
             newLinks.push({
               source: fileId,
               target: node.id,
-              color: '#555'
+              color: '#444',
+              type: 'file'
             });
+        }
+
+        // Dependency Links (function calls)
+        if (node.dependencies && node.dependencies.length > 0) {
+          node.dependencies.forEach(depId => {
+            newLinks.push({
+              source: node.id,
+              target: depId,
+              color: '#e67e22', // Orange for call relationships
+              type: 'call'
+            });
+          });
         }
       });
 

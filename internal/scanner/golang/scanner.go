@@ -16,22 +16,32 @@ func NewGoScanner() *GoScanner {
 	return &GoScanner{}
 }
 
+// funcInfo stores function info for dependency resolution
+type funcInfo struct {
+	node     *models.CodeNode
+	funcDecl *ast.FuncDecl
+}
+
 func (s *GoScanner) Scan(filePath string, content []byte) ([]*models.CodeNode, error) {
 	fset := token.NewFileSet()
-	node, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
+	file, err := parser.ParseFile(fset, filePath, content, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 
 	var nodes []*models.CodeNode
+	var funcInfos []funcInfo
 
-	ast.Inspect(node, func(n ast.Node) bool {
+	// Phase 1: Collect all functions, interfaces, and HTTP calls
+	ast.Inspect(file, func(n ast.Node) bool {
 		switch t := n.(type) {
 		case *ast.FuncDecl:
-			nodes = append(nodes, s.parseFunction(fset, node, t, filePath))
+			codeNode := s.parseFunction(fset, file, t, filePath)
+			nodes = append(nodes, codeNode)
+			funcInfos = append(funcInfos, funcInfo{node: codeNode, funcDecl: t})
 		case *ast.TypeSpec:
 			if _, ok := t.Type.(*ast.InterfaceType); ok {
-				nodes = append(nodes, s.parseInterface(fset, node, t, filePath))
+				nodes = append(nodes, s.parseInterface(fset, file, t, filePath))
 			}
 		case *ast.CallExpr:
 			// Detect HTTP Clients (Basic Heuristic)
@@ -42,7 +52,87 @@ func (s *GoScanner) Scan(filePath string, content []byte) ([]*models.CodeNode, e
 		return true
 	})
 
+	// Phase 2: Extract unresolved call references for cross-file resolution
+	for _, fi := range funcInfos {
+		if fi.funcDecl.Body == nil {
+			continue
+		}
+		refs := s.extractCallRefs(fi.funcDecl.Body)
+		if len(refs) > 0 {
+			fi.node.UnresolvedRefs = refs
+		}
+	}
+
 	return nodes, nil
+}
+
+// extractCallRefs extracts function call references from a function body
+func (s *GoScanner) extractCallRefs(body *ast.BlockStmt) []string {
+	refSet := make(map[string]bool)
+
+	ast.Inspect(body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+
+		ref := s.extractCallRef(call)
+		if ref != "" {
+			refSet[ref] = true
+		}
+
+		return true
+	})
+
+	refs := make([]string, 0, len(refSet))
+	for ref := range refSet {
+		refs = append(refs, ref)
+	}
+	return refs
+}
+
+// extractCallRef extracts a call reference string from a CallExpr
+func (s *GoScanner) extractCallRef(call *ast.CallExpr) string {
+	switch fn := call.Fun.(type) {
+	case *ast.Ident:
+		// Direct function call: foo()
+		return fn.Name
+	case *ast.SelectorExpr:
+		// Method or package call: obj.Method() or pkg.Func()
+		return s.selectorToString(fn)
+	}
+	return ""
+}
+
+// selectorToString converts a SelectorExpr to a dotted string
+// e.g., handlers.RegisterRoutes or h.service.GetNodes
+func (s *GoScanner) selectorToString(sel *ast.SelectorExpr) string {
+	var parts []string
+	current := ast.Expr(sel)
+
+	for {
+		switch t := current.(type) {
+		case *ast.SelectorExpr:
+			parts = append([]string{t.Sel.Name}, parts...)
+			current = t.X
+		case *ast.Ident:
+			parts = append([]string{t.Name}, parts...)
+			return joinParts(parts)
+		default:
+			return joinParts(parts)
+		}
+	}
+}
+
+func joinParts(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	result := parts[0]
+	for i := 1; i < len(parts); i++ {
+		result += "." + parts[i]
+	}
+	return result
 }
 
 func (s *GoScanner) parseFunction(fset *token.FileSet, file *ast.File, fn *ast.FuncDecl, filePath string) *models.CodeNode {
@@ -110,17 +200,6 @@ func (s *GoScanner) extractComments(fset *token.FileSet, file *ast.File, pos tok
 	var relevantGroups []*ast.CommentGroup
 	targetLine := fset.Position(pos).Line - 1
 
-	// Iterate all comment groups in the file
-	// Since file.Comments is sorted by position, we can iterate backwards or standard.
-	// We want the group that ends exactly at targetLine.
-
-	// 1. Find the comment group that is immediately above the function
-	// 2. If found, new targetLine becomes the line above that comment group
-	// 3. Repeat
-
-	// Build a map of endLine -> CommentGroup for O(1) lookup would be ideal,
-	// but iterating is fine for file-level operations.
-
 	for {
 		found := false
 		for _, cg := range file.Comments {
@@ -130,28 +209,18 @@ func (s *GoScanner) extractComments(fset *token.FileSet, file *ast.File, pos tok
 				startLine := fset.Position(cg.Pos()).Line
 				targetLine = startLine - 1
 				found = true
-				break // Start search again with new targetLine
+				break
 			}
 		}
 		if !found {
-			// Check for empty lines? The prompt says "if there are more comments above... recursively add"
-			// Implicitly assuming contiguity or standard go comments.
-			// If we didn't find a comment ending at targetLine, we stop.
-			// NOTE: This simple logic handles "contiguous" blocks.
-			// If there's a blank line, targetLine won't match.
 			break
 		}
 	}
 
-	// Process gathered groups
 	var comments []string
 	for _, cg := range relevantGroups {
 		comments = append(comments, cg.Text())
 	}
-
-	// Sort: user requested "sort it revert i guess cause will be going up"
-	// The loop finds closest first, so it is already closest-to-farthest (bottom-up).
-	// So 'comments' index 0 is the one right above the function.
 
 	return comments
 }

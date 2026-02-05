@@ -14,6 +14,7 @@ import (
 
 	"github.com/chinmay-sawant/gosourcemapper/internal/models"
 	"github.com/chinmay-sawant/gosourcemapper/internal/repository"
+	"github.com/chinmay-sawant/gosourcemapper/internal/resolver"
 	"github.com/chinmay-sawant/gosourcemapper/internal/scanner"
 	"github.com/chinmay-sawant/gosourcemapper/internal/scanner/golang"
 	"github.com/chinmay-sawant/gosourcemapper/internal/scanner/java"
@@ -125,6 +126,12 @@ func (s *scanService) ScanDirectory(dirPath string) ([]*models.CodeNode, error) 
 	if err != nil {
 		return nil, err
 	}
+
+	// Post-processing: Resolve cross-file dependencies
+	depResolver := resolver.NewDependencyResolver()
+	depResolver.BuildRegistry(allNodes)
+	depResolver.ResolveAll(allNodes)
+
 	return allNodes, nil
 }
 
