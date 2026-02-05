@@ -1,12 +1,15 @@
 package service
 
 import (
+	"encoding/base64"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime/multipart"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chinmay-sawant/gosourcemapper/internal/models"
@@ -23,6 +26,7 @@ type ScanService interface {
 	ScanDirectory(dirPath string) ([]*models.CodeNode, error)
 	ProcessZipUpload(file *multipart.FileHeader, destRoot string) ([]*models.CodeNode, error)
 	GetAllNodes() []*models.CodeNode
+	GetNodes(limit int, nextToken string, skipExts, skipDirs []string) ([]*models.CodeNode, string, error)
 }
 
 type scanService struct {
@@ -65,16 +69,42 @@ func (s *scanService) ScanFile(filePath string, content []byte) ([]*models.CodeN
 
 func (s *scanService) ScanDirectory(dirPath string) ([]*models.CodeNode, error) {
 	var allNodes []*models.CodeNode
+	var mu sync.Mutex
 
-	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
+	// Worker pool settings
+	// Limit concurrency to avoid too many open files or contention
+	maxWorkers := 20
+	jobs := make(chan string, 1000)
+	var wg sync.WaitGroup
+
+	// Start workers
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for path := range jobs {
+				content, err := os.ReadFile(path)
+				if err != nil {
+					continue
+				}
+				nodes, err := s.ScanFile(path, content)
+				if err == nil && len(nodes) > 0 {
+					mu.Lock()
+					allNodes = append(allNodes, nodes...)
+					mu.Unlock()
+				}
+			}
+		}()
+	}
+
+	err := filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if d.IsDir() {
 			// Skip hidden directories (like .git)
-			if strings.HasPrefix(info.Name(), ".") && info.Name() != "." && info.Name() != ".temp" { // Allow .temp itself if recursing?
-				// Actually standard excludes: .git, .idea via logic
-				if info.Name() == ".git" || info.Name() == ".idea" {
+			if strings.HasPrefix(d.Name(), ".") && d.Name() != "." && d.Name() != ".temp" {
+				if d.Name() == ".git" || d.Name() == ".idea" || d.Name() == ".vscode" {
 					return filepath.SkipDir
 				}
 			}
@@ -83,25 +113,14 @@ func (s *scanService) ScanDirectory(dirPath string) ([]*models.CodeNode, error) 
 
 		// Check extension support
 		ext := strings.ToLower(filepath.Ext(path))
-		if _, ok := s.scanners[ext]; !ok {
-			return nil
+		if _, ok := s.scanners[ext]; ok {
+			jobs <- path
 		}
-
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-
-		nodes, err := s.ScanFile(path, content)
-		if err != nil {
-			// Log error but continue? Or fail? Let's log/continue logic basically by collecting err
-			// For now, strict fail or ignore?
-			// Ignoring error for individual files to allow partial success is better for "mapper"
-			return nil
-		}
-		allNodes = append(allNodes, nodes...)
 		return nil
 	})
+
+	close(jobs)
+	wg.Wait()
 
 	if err != nil {
 		return nil, err
@@ -155,4 +174,36 @@ func (s *scanService) ProcessZipUpload(file *multipart.FileHeader, destRoot stri
 
 func (s *scanService) GetAllNodes() []*models.CodeNode {
 	return s.repo.GetAllNodes()
+}
+
+func (s *scanService) GetNodes(limit int, nextToken string, skipExts, skipDirs []string) ([]*models.CodeNode, string, error) {
+	offset := 0
+	if nextToken != "" {
+		decoded, err := base64.StdEncoding.DecodeString(nextToken)
+		if err != nil {
+			// Only log? or return error?
+			// Return error for bad request
+			return nil, "", fmt.Errorf("invalid nextToken")
+		}
+		var decodedOffset int
+		_, err = fmt.Sscanf(string(decoded), "%d", &decodedOffset)
+		if err == nil {
+			offset = decodedOffset
+		}
+	}
+
+	nodes, nextIndex, err := s.repo.GetNodesPaginated(offset, limit, skipExts, skipDirs)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var newNextToken string
+
+	// Refined Logic:
+	// If nodes < limit, we exhausted the list? Yes because we scan until limit or end.
+	if len(nodes) == limit {
+		newNextToken = base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%d", nextIndex)))
+	}
+
+	return nodes, newNextToken, nil
 }

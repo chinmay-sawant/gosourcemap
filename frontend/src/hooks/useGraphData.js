@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 
 const NODE_COLORS = {
@@ -23,73 +23,129 @@ const NODE_VALS = {
 
 export const useGraphData = () => {
   const [data, setData] = useState({ nodes: [], links: [] });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [nextToken, setNextToken] = useState(null);
+  const [limit, setLimit] = useState(100); // Default limit
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
-        const response = await axios.get(`${baseURL}/v1/nodes`);
-        const codeNodes = response.data.nodes || [];
+  const [filters, setFilters] = useState({ 
+    skipExt: ['.java', '.py', '.js', '.css', '.html', '.json', '.md', '.txt', '.xml', '.yml', '.yaml'], 
+    skipDir: ['node_modules', 'dist', 'build', 'venv', '.git']
+  });
 
-        const nodes = [];
-        const links = [];
-        const fileMap = new Map();
+  const fetchNodes = useCallback(async (token = null, reset = false, currentFilters = filters) => {
+    setLoading(true);
+    try {
+      const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+      const params = { 
+        limit,
+        skip_ext: currentFilters.skipExt.join(','),
+        skip_dir: currentFilters.skipDir.join(',')
+      };
+      if (token) params.nextToken = token;
 
-        // 1. Create File Nodes first to act as hubs
-        codeNodes.forEach(node => {
-          if (!node.file_path) return;
-          
-          if (!fileMap.has(node.file_path)) {
-            const fileName = node.file_path.split('/').pop();
-            const fileNode = {
-              id: `file:${node.file_path}`,
-              name: fileName,
+      const response = await axios.get(`${baseURL}/v1/nodes`, { params });
+      const { nodes: codeNodes, nextToken: newToken } = response.data;
+
+      const newNodes = [];
+      const newLinks = [];
+      
+      codeNodes.forEach(node => {
+        // Code Node
+        newNodes.push({
+          id: node.id,
+          name: node.name,
+          type: node.type, 
+          val: NODE_VALS[node.type] || NODE_VALS.DEFAULT,
+          color: NODE_COLORS[node.type] || NODE_COLORS.DEFAULT,
+          original: node
+        });
+
+        // File Node (Synthetic)
+        if (node.file_path) {
+             const fileId = `file:${node.file_path}`;
+             newNodes.push({
+              id: fileId,
+              name: node.file_path.split('/').pop(),
               type: 'FILE',
               val: NODE_VALS.FILE,
               color: NODE_COLORS.FILE,
               fullPath: node.file_path
-            };
-            fileMap.set(node.file_path, fileNode);
-            nodes.push(fileNode);
-          }
-        });
-
-        // 2. Process Code Nodes and link to File
-        codeNodes.forEach(node => {
-          const graphNode = {
-            id: node.id,
-            name: node.name,
-            type: node.type, // FUNCTION, CLASS, etc.
-            val: NODE_VALS[node.type] || NODE_VALS.DEFAULT,
-            color: NODE_COLORS[node.type] || NODE_COLORS.DEFAULT,
-            // Store original data for sidebar
-            original: node 
-          };
-          nodes.push(graphNode);
-
-          // Link to File Node
-          if (node.file_path && fileMap.has(node.file_path)) {
-            links.push({
-              source: `file:${node.file_path}`,
-              target: node.id,
-              color: '#555' // Subtle link color
             });
-          }
+
+            newLinks.push({
+              source: fileId,
+              target: node.id,
+              color: '#555'
+            });
+        }
+      });
+
+      setData(prev => {
+        if (reset) {
+            // Dedup within the new batch only
+            const uniqueNodes = new Map();
+            newNodes.forEach(n => uniqueNodes.set(n.id, n));
+            return { nodes: Array.from(uniqueNodes.values()), links: newLinks };
+        }
+
+        // Merge logic
+        const combinedNodes = [...prev.nodes];
+        const existingIds = new Set(prev.nodes.map(n => n.id));
+        
+        newNodes.forEach(n => {
+            if (!existingIds.has(n.id)) {
+                combinedNodes.push(n);
+                existingIds.add(n.id);
+            }
         });
 
-        setData({ nodes, links });
-        setLoading(false);
-      } catch (err) {
-        console.error("Failed to fetch graph data", err);
-        setError(err);
-        setLoading(false);
-      }
-    };
+        return {
+            nodes: combinedNodes,
+            links: [...prev.links, ...newLinks]
+        };
+      });
 
-    fetchData();
-  }, []);
+      setNextToken(newToken);
+      setLoading(false);
+    } catch (err) {
+      console.error("Failed to fetch graph data", err);
+      setError(err);
+      setLoading(false);
+    }
+  }, [limit, filters]); // Re-fetch if filters change? Or requires manual trigger?
+  // Ideally, if filters change, we should reset.
 
-  return { data, loading, error };
+  // Initial load
+  useEffect(() => {
+    // Use a microtask to avoid synchronous setState inside useEffect which triggers lint error
+    Promise.resolve().then(() => {
+      fetchNodes(null, true);
+    });
+  }, [fetchNodes]);
+
+  const loadMore = () => {
+    if (nextToken) {
+        fetchNodes(nextToken, false);
+    }
+  };
+
+  const applyFilters = (newFilters) => {
+    setFilters(newFilters);
+    // Trigger reset fetch
+    fetchNodes(null, true, newFilters);
+  };
+
+  return { 
+    data, 
+    loading, 
+    error, 
+    loadMore, 
+    hasMore: !!nextToken, 
+    setLimit, 
+    limit, 
+    refresh: () => fetchNodes(null, true),
+    filters,
+    applyFilters
+  };
 };

@@ -5,8 +5,14 @@ meta {
 }
 
 get {
-  url: {{baseURL}}/v1/nodes
+  url: {{baseURL}}/v1/nodes?limit=100
   body: none
   auth: none
 }
 
+params:query {
+  limit: 100
+  nextToken: 
+  skip_ext: 
+  skip_dir: 
+}

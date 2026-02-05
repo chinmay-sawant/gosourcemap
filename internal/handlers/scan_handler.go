@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/base64"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/chinmay-sawant/gosourcemapper/internal/service"
 	"github.com/gin-gonic/gin"
@@ -80,6 +82,33 @@ func (h *ScanHandler) ScanDirectory(c *gin.Context) {
 }
 
 func (h *ScanHandler) GetAllNodes(c *gin.Context) {
-	nodes := h.service.GetAllNodes()
-	c.JSON(http.StatusOK, gin.H{"nodes": nodes, "count": len(nodes)})
+	limitStr := c.DefaultQuery("limit", "100")
+	nextToken := c.Query("nextToken")
+	skipExtStr := c.Query("skip_ext")
+	skipDirStr := c.Query("skip_dir")
+
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil || limit <= 0 {
+		limit = 100
+	}
+
+	var skipExts, skipDirs []string
+	if skipExtStr != "" {
+		skipExts = strings.Split(skipExtStr, ",")
+	}
+	if skipDirStr != "" {
+		skipDirs = strings.Split(skipDirStr, ",")
+	}
+
+	nodes, newNextToken, err := h.service.GetNodes(limit, nextToken, skipExts, skipDirs)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"nodes":     nodes,
+		"nextToken": newNextToken,
+		"count":     len(nodes),
+	})
 }

@@ -1,0 +1,18 @@
+meta {
+  name: Get Nodes Filtered
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseURL}}/v1/nodes?limit=100&skip_ext=.py,.java&skip_dir=venv,node_modules
+  body: none
+  auth: none
+}
+
+params:query {
+  limit: 100
+  nextToken: 
+  skip_ext: .py,.java
+  skip_dir: venv,node_modules
+}
