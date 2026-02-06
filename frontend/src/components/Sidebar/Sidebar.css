@@ -10,15 +10,21 @@
   border-radius: 12px;
   padding: 20px;
   color: #e0e0e0;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
   overflow-y: auto;
   z-index: 1000;
   animation: slideIn 0.3s ease-out;
 }
 
 @keyframes slideIn {
-  from { transform: translateX(20px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  from {
+    transform: translateX(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }
 
 .sidebar-header {
@@ -80,6 +86,23 @@
   color: #aaa;
 }
 
+.value.file-path.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 8px 10px;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border: 1px solid #333;
+  margin-top: 8px;
+}
+
+.value.file-path.clickable:hover {
+  color: #61dafb;
+  background: #222;
+  border-color: #61dafb;
+  text-decoration: underline;
+}
+
 .tag {
   display: inline-block;
   padding: 4px 8px;
@@ -90,21 +113,132 @@
 }
 
 /* Tag Colors */
-.tag[data-type="FUNCTION"] { background: rgba(97, 218, 251, 0.2); color: #61dafb; }
-.tag[data-type="CLASS"] { background: rgba(241, 196, 15, 0.2); color: #f1c40f; }
-.tag[data-type="HTTP_CALL"] { background: rgba(255, 107, 107, 0.2); color: #ff6b6b; }
-.tag[data-type="CMD_EXEC"] { background: rgba(230, 126, 34, 0.2); color: #e67e22; }
-.tag[data-type="FILE"] { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.tag[data-type="FUNCTION"] {
+  background: rgba(97, 218, 251, 0.2);
+  color: #61dafb;
+}
+.tag[data-type="CLASS"] {
+  background: rgba(241, 196, 15, 0.2);
+  color: #f1c40f;
+}
+.tag[data-type="HTTP_CALL"] {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ff6b6b;
+}
+.tag[data-type="CMD_EXEC"] {
+  background: rgba(230, 126, 34, 0.2);
+  color: #e67e22;
+}
+.tag[data-type="FILE"] {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
 
 .comments-block {
   background: #111;
   padding: 10px;
   border-radius: 6px;
-  font-family: 'Fira Code', monospace;
+  font-family: "Fira Code", monospace;
   font-size: 0.85rem;
   color: #aaa;
   white-space: pre-wrap;
   max-height: 200px;
   overflow-y: auto;
   border: 1px solid #333;
+}
+
+/* Editor Open Section */
+.editor-open-section {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editor-dropdown {
+  position: relative;
+  flex: 1;
+}
+
+.editor-dropdown-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: #222;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.editor-dropdown-btn:hover {
+  background: #333;
+  border-color: #555;
+}
+
+.editor-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: #1a1a1a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  overflow: hidden;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.editor-option {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editor-option:hover {
+  background: #333;
+  color: #fff;
+}
+
+.editor-option.active {
+  background: rgba(97, 218, 251, 0.15);
+  color: #61dafb;
+}
+
+.open-file-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #61dafb 0%, #4fa8d5 100%);
+  border: none;
+  border-radius: 6px;
+  color: #000;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.open-file-btn:hover {
+  background: linear-gradient(135deg, #7ae3ff 0%, #61dafb 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(97, 218, 251, 0.3);
+}
+
+.open-file-btn:active {
+  transform: translateY(0);
 }

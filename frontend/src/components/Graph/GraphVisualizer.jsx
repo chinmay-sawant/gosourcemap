@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import * as d3 from 'd3';
 import './GraphVisualizer.css';
@@ -7,6 +7,23 @@ const GraphVisualizer = ({ data, onNodeClick }) => {
   const fgRef = useRef();
   const [selectedNode, setSelectedNode] = useState(null);
   const [connectedNodes, setConnectedNodes] = useState(new Set());
+
+  // Build REVERSE adjacency list from links (memoized for performance)
+  // Only track predecessors/callers, NOT successors/callees
+  // If link is source -> target, we store: target -> source (reverse direction)
+  // This allows us to traverse BACKWARDS from a node to find its callers
+  const reverseAdjacencyList = useMemo(() => {
+    const adj = new Map();
+    data.links.forEach(link => {
+      const sourceId = link.source.id || link.source;
+      const targetId = link.target.id || link.target;
+      
+      // Only store reverse direction: target points to source (caller)
+      if (!adj.has(targetId)) adj.set(targetId, new Set());
+      adj.get(targetId).add(sourceId);
+    });
+    return adj;
+  }, [data.links]);
 
   // Configure forces after component mounts
   const handleEngineInit = useCallback(() => {
@@ -19,20 +36,37 @@ const GraphVisualizer = ({ data, onNodeClick }) => {
     }
   }, []);
 
-  // Build adjacency when a node is clicked
+  // BFS to find all PREDECESSOR nodes (callers/sources) - goes BACKWARDS only
+  // If chain is: 1 -> 2 -> 3 -> 4, clicking 3 will find: 2, 1
+  const findAllPredecessorNodes = useCallback((startNodeId) => {
+    const visited = new Set();
+    const queue = [startNodeId];
+    
+    while (queue.length > 0) {
+      const currentId = queue.shift();
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+      
+      // Get predecessors (nodes that call/link to current node)
+      const predecessors = reverseAdjacencyList.get(currentId);
+      if (predecessors) {
+        predecessors.forEach(predecessorId => {
+          if (!visited.has(predecessorId)) {
+            queue.push(predecessorId);
+          }
+        });
+      }
+    }
+    
+    // Remove the start node from connected set (it's the selected node)
+    visited.delete(startNodeId);
+    return visited;
+  }, [reverseAdjacencyList]);
+
+  // Build adjacency when a node is clicked - traces BACKWARDS to callers
   const handleNodeClick = useCallback((node) => {
-    // Build set of connected node IDs (direct neighbors only)
-    const connected = new Set();
-    data.links.forEach(link => {
-      const sourceId = link.source.id || link.source;
-      const targetId = link.target.id || link.target;
-      if (sourceId === node.id) {
-        connected.add(targetId);
-      }
-      if (targetId === node.id) {
-        connected.add(sourceId);
-      }
-    });
+    // Find ALL predecessor nodes (callers) using BFS - goes backwards only
+    const connected = findAllPredecessorNodes(node.id);
 
     setSelectedNode(node.id);
     setConnectedNodes(connected);
@@ -41,7 +75,7 @@ const GraphVisualizer = ({ data, onNodeClick }) => {
     fgRef.current.centerAt(node.x, node.y, 1000);
     fgRef.current.zoom(3, 1500);
     onNodeClick(node);
-  }, [data.links, onNodeClick]);
+  }, [findAllPredecessorNodes, onNodeClick]);
 
   // Determine link color based on selection state
   const getLinkColor = useCallback((link) => {
@@ -51,12 +85,15 @@ const GraphVisualizer = ({ data, onNodeClick }) => {
     const sourceId = link.source.id || link.source;
     const targetId = link.target.id || link.target;
     
-    // Check if this link connects to the selected node
-    if (sourceId === selectedNode || targetId === selectedNode) {
+    // Check if BOTH ends of the link are in the connected set (including selected node)
+    const sourceInSet = sourceId === selectedNode || connectedNodes.has(sourceId);
+    const targetInSet = targetId === selectedNode || connectedNodes.has(targetId);
+    
+    if (sourceInSet && targetInSet) {
       return '#90ee90'; // Light green for connected links
     }
     return '#333'; // Dim for non-connected
-  }, [selectedNode]);
+  }, [selectedNode, connectedNodes]);
 
   // Determine link width based on selection state
   const getLinkWidth = useCallback((link) => {
@@ -66,13 +103,17 @@ const GraphVisualizer = ({ data, onNodeClick }) => {
     const sourceId = link.source.id || link.source;
     const targetId = link.target.id || link.target;
     
-    if (sourceId === selectedNode || targetId === selectedNode) {
+    // Check if BOTH ends of the link are in the connected set (including selected node)
+    const sourceInSet = sourceId === selectedNode || connectedNodes.has(sourceId);
+    const targetInSet = targetId === selectedNode || connectedNodes.has(targetId);
+    
+    if (sourceInSet && targetInSet) {
       return 3; // Thicker for highlighted
     }
     return 0.5; // Thinner for dimmed
-  }, [selectedNode]);
+  }, [selectedNode, connectedNodes]);
 
-  // Custom node canvas rendering for FILE labels
+  // Custom node canvas rendering - now shows labels for connected nodes
   const nodeCanvasObject = useCallback((node, ctx, globalScale) => {
     const isFile = node.type === 'FILE';
     const isSelected = node.id === selectedNode;
@@ -96,14 +137,19 @@ const GraphVisualizer = ({ data, onNodeClick }) => {
     ctx.fillStyle = color;
     ctx.fill();
     
-    // Draw label for FILE nodes (always) or when zoomed in enough
-    if (isFile || globalScale > 1.5) {
+    // Draw label for:
+    // 1. FILE nodes (always)
+    // 2. Selected or connected nodes (when there's a selection)
+    // 3. Any node when zoomed in enough
+    const shouldShowLabel = isFile || (selectedNode && (isSelected || isConnected)) || globalScale > 1.5;
+    
+    if (shouldShowLabel) {
       const label = node.name;
       const fontSize = isFile ? 12 / globalScale : 10 / globalScale;
       ctx.font = `${fontSize}px Sans-Serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillStyle = isFile ? '#ffffff' : '#aaaaaa';
+      ctx.fillStyle = isFile ? '#ffffff' : (isSelected || isConnected) ? '#ffffff' : '#aaaaaa';
       ctx.fillText(label, node.x, node.y + radius + 2);
     }
   }, [selectedNode, connectedNodes]);
